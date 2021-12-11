@@ -19,7 +19,7 @@ logger.setLevel(logging.INFO)
 logger.addHandler(stream_handler)
 
 regression_logger = logging.getLogger("Linear_Regression")
-regression_logger.setLevel(logging.INFO)
+regression_logger.setLevel(logging.ERROR)
 regression_logger.addHandler(stream_handler)
 
 
@@ -211,7 +211,7 @@ class Logistic_Regression:
                 f"after cycle no {cycle} co_effs are {self.co_eff}"
             )
 
-    def __init__(self, x_values, y_values, alpha=0.005, max_iterations=100) -> None:
+    def __init__(self, x_values, y_values, alpha=0.00005, max_iterations=200) -> None:
         if len(x_values) != len(y_values):
             raise Exception
 
@@ -238,18 +238,18 @@ class Logistic_Regression:
 
     def predict(self, x):
         x_with_xo = x.copy()
-        regression_logger.warning(x_with_xo)
+        regression_logger.info(x_with_xo)
         number_of_samples, number_of_features = x_with_xo.shape
         one_column = np.ones((number_of_samples, 1))
         regression_logger.info(x_with_xo)
         x_with_xo = np.append(x_with_xo, one_column, axis=1)
         regression_logger.info(x_with_xo)
         tanh_hypothesis_value = self.hypothesis_of_x(x_with_xo)
-        regression_logger.warning(tanh_hypothesis_value)
+        regression_logger.info(tanh_hypothesis_value)
         prediction = tanh_hypothesis_value >= 0
-        regression_logger.warning(prediction)
-        prediction[prediction == True] = 1
-        prediction[prediction == False] = 0
+        regression_logger.info(prediction)
+        prediction = prediction.astype(int)
+        regression_logger.info(prediction)
         return prediction
 
 
@@ -266,7 +266,7 @@ logger.info(result)
 
 class Weighted_Majority:
     weighted_majority_logger = logging.getLogger("Weighted_Majority")
-    weighted_majority_logger.setLevel(logging.INFO)
+    weighted_majority_logger.setLevel(logging.WARNING)
     weighted_majority_logger.addHandler(stream_handler)
 
     def __init__(self, hypothesis_group, hypothesis_weights) -> None:
@@ -279,26 +279,33 @@ class Weighted_Majority:
 
     def predict(self, x):
         logger = Weighted_Majority.weighted_majority_logger
-        result = pd.DataFrame(np.zeros(len(x)))
+        result = np.zeros(len(x))
         for i in range(len(self.hypothesis_group)):
-            df = self.hypothesis_group[i].predict(x)
+            prediction = self.hypothesis_group[i].predict(x)
             # df has 0/1 as output we are converting it to -1/1
-            df = df.replace(to_replace=0, value=-1)
-
-            result = result + df * self.hypothesis_weights[i]
+            prediction[prediction == 0] = -1
+            logger.info(self.hypothesis_group[i].co_eff)
+            logger.info((prediction))
+            logger.info(self.hypothesis_weights[i])
+            result = result + prediction * self.hypothesis_weights[i]
             logger.info(result)
+        prediction = result >= 0
+        logger.info(prediction)
+        prediction = prediction.astype(int)
+        logger.info(prediction)
+        return prediction
 
 
 def adaboost(x, y, L, k=5):
     adaboost_logger = logging.getLogger("AdaBoost")
-    adaboost_logger.setLevel(logging.INFO)
+    adaboost_logger.setLevel(logging.WARNING)
     adaboost_logger.addHandler(stream_handler)
 
     example_count = len(x)
     hypothesis_weights = [0] * k
     hypothesis_group = []
     index_array = np.arange(example_count)
-    prob_array = pd.DataFrame(np.full((example_count), 1 / example_count))
+    prob_array = np.full(example_count, 1 / example_count)
     adaboost_logger.info(index_array)
     adaboost_logger.info(prob_array)
 
@@ -306,23 +313,23 @@ def adaboost(x, y, L, k=5):
     np.random.seed(seed_value)
 
     for i in range(k):
-        sampled_index = np.random.choice(
-            index_array, size=example_count, p=prob_array[0]
-        )
+        sampled_index = np.random.choice(index_array, size=example_count, p=prob_array)
         adaboost_logger.info(sampled_index)
-        sampled_df_x = x.iloc[sampled_index]
-        sampled_df_y = y.iloc[sampled_index]
+        adaboost_logger.info(np.bincount(sampled_index))
+        sampled_x = x[sampled_index, :]
+        sampled_y = y[sampled_index]
+        adaboost_logger.info(sampled_x.shape)
+        adaboost_logger.info(sampled_y.shape)
 
-        adaboost_logger.info(len(sampled_df_x))
-        adaboost_logger.info(len(sampled_df_y))
-
-        model = L(sampled_df_x, sampled_df_y)
+        model = L(sampled_x, sampled_y)
         hypothesis_group.append(model)
         prediction = model.predict(x)
-        adaboost_logger.info(len(x.columns))
+        logger.info(np.bincount(prediction))
+        adaboost_logger.info(x.shape)
         adaboost_logger.info(len(model.co_eff))
+        adaboost_logger.info(model.co_eff)
 
-        adaboost_logger.info(prediction.value_counts())
+        adaboost_logger.info(np.bincount(prediction))
         result = (y == prediction).astype(int)
         adaboost_logger.info(result)
         # we want to figure out which predictions are wrong so we are going to invert result
@@ -330,16 +337,15 @@ def adaboost(x, y, L, k=5):
         result_bar = 1 - result
         adaboost_logger.info(result_bar)
         error = result_bar * prob_array
+        adaboost_logger.info(error)
         error_sum = error.sum()
         adaboost_logger.info(error_sum)
-        if error_sum[0] > 0.5:
+        if error_sum > 0.5:
             continue
         # reducing weight from 1 to below 1 for right predicted data points
         probability_update_multiplier = result * (error_sum / (1 - error_sum))
         # wrong predicted rows have 0 in them giving them weight of 1
-        probability_update_multiplier = probability_update_multiplier.replace(
-            to_replace=0, value=1
-        )
+        probability_update_multiplier[probability_update_multiplier == 0] = 1 
         adaboost_logger.info(probability_update_multiplier)
 
         # updating probability
@@ -357,5 +363,12 @@ def adaboost(x, y, L, k=5):
     return Weighted_Majority(hypothesis_group, hypothesis_weights)
 
 
-# majority_model = adaboost(x,y,Logistic_Regression)
-# majority_model.predict(x)
+majority_model = adaboost(x, y, Logistic_Regression,15)
+churn = majority_model.predict(x)
+
+logger.info(churn)
+
+logger.info(np.bincount(churn))
+logger.info(np.bincount(y))
+result = (y == churn).mean()
+logger.info(result)
