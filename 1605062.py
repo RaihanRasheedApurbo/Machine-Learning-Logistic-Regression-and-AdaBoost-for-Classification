@@ -23,147 +23,31 @@ regression_logger.setLevel(logging.ERROR)
 regression_logger.addHandler(stream_handler)
 
 
-df = pd.read_csv("WA_Fn-UseC_-Telco-Customer-Churn.csv")
-logger.info(len(df))
-logger.info(df.head())
-logger.info(df.dtypes)
-logger.info(df[df.columns].isnull().sum())
-logger.info(df[df.columns].nunique())
-
-
-categorical_columns = [
-    "gender",
-    "SeniorCitizen",
-    "Partner",
-    "Dependents",
-    "PhoneService",
-    "MultipleLines",
-    "InternetService",
-    "OnlineSecurity",
-    "OnlineBackup",
-    "DeviceProtection",
-    "TechSupport",
-    "StreamingTV",
-    "StreamingMovies",
-    "Contract",
-    "PaperlessBilling",
-    "PaymentMethod",
-]
-numerical_columns = ["tenure", "MonthlyCharges", "TotalCharges"]
-
-
-# TotalCharges column has float value but it is parsed as an object
-# that's is why we are converting it to numeric float64
-total_charges = pd.to_numeric(df.TotalCharges, errors="coerce")  # converting to float64
-logger.info(total_charges)
-logger.info(type(total_charges))
-# logging blank valued rows after converting to numeric
-logger.info(
-    df[total_charges.isnull()][["customerID", "TotalCharges", "MonthlyCharges"]]
-)
-df["TotalCharges"] = total_charges
-
-# replacing blanks with the MonthlyCharges attribute value of same row
-values = df[total_charges.isnull()]["MonthlyCharges"].values
-df.loc[total_charges.isnull(), "TotalCharges"] = values
-logger.info(
-    df[total_charges.isnull()][["customerID", "TotalCharges", "MonthlyCharges"]]
-)
-
-# converting Y/Output value from yes/no to 1/-1
-logger.info(df.Churn.head())
-logger.info(df.Churn.value_counts())
-df.Churn = df["Churn"].replace(to_replace="Yes", value=1)
-df.Churn = df["Churn"].replace(to_replace="No", value=0)
-logger.info(df.Churn.head())
-logger.info(df.Churn.value_counts())
-
-# normalizing numerical attributes
-for attribute in numerical_columns:
-    min_value = df[attribute].min()
-    max_value = df[attribute].max()
-    df[attribute] = (df[attribute] - min_value) / (max_value - min_value)
-# logging after normalization
-logger.info(df[["customerID"] + numerical_columns])
-
-# using same random_seed variable for reproducible result
-random_seed = 7
-test_data_fraction = 0.2
-validation_data_fraction = 0.33
-
-# splitting data for test and training
-full_training_data, testing_data = train_test_split(
-    df, test_size=test_data_fraction, random_state=random_seed
-)
-# splitting full training data into training and validation data
-training_data, validation_data = train_test_split(
-    full_training_data, test_size=validation_data_fraction, random_state=random_seed
-)
-
-# storing output churn column in sperate place and deleting this column from the dataframe
-output_of_training_data = training_data.Churn.values
-output_of_validation_data = validation_data.Churn.values
-del training_data["Churn"]
-del validation_data["Churn"]
-
-logger.info(full_training_data.Churn.value_counts())
-
-
-# doing catagorical value encoding using skitlearn's DictVectorizer class
-training_data_dict = training_data[categorical_columns + numerical_columns].to_dict(
-    orient="records"
-)
-dictionary_vectorizer = DictVectorizer(sparse=False)
-dictionary_vectorizer.fit(training_data_dict)
-training_data_feature_matrix_x = dictionary_vectorizer.transform(training_data_dict)
-logger.info(dictionary_vectorizer.get_feature_names_out())
-logger.info(len(dictionary_vectorizer.get_feature_names_out()))
-logger.info(training_data_feature_matrix_x[0])
-
-# test dummy data
-# 1231  147 w1
-# 4561  258 w2
-# 7891  369 w3
-#       111
-# data_x = [[1,2,3],[4,5,6],[7,8,9]]
-# data_y = [1,1,0]
-# x = pd.DataFrame(data_x)
-# y = pd.DataFrame(data_y)
-logger.info(type(training_data_feature_matrix_x))
-x = training_data_feature_matrix_x
-y = output_of_training_data
-logger.info(x.shape)
-logger.info(y.shape)
-logger.info(np.bincount(y))
-
-
 class Logistic_Regression:
-    @staticmethod
-    def apply_tanh(z):
-        e = 0.05
-        tanh_value = math.tanh(z)
-        if tanh_value < -0.95:
-            tanh_value = tanh_value + e
-        elif tanh_value > 0.95:
-            tanh_value = tanh_value - e
-        return tanh_value
+    def __init__(self, x_values, y_values, alpha=0.00005, max_iterations=200) -> None:
+        if len(x_values) != len(y_values):
+            raise Exception
 
-    def hypothesis_of_x(self, x):
-        matrix_x = x
-        matrix_co_eff = np.array(self.co_eff).transpose()
-        regression_logger.info(matrix_x)
-        regression_logger.info(matrix_co_eff)
-        h_x = np.matmul(matrix_x, matrix_co_eff)
-        regression_logger.info(h_x)
-        regression_logger.info(h_x.shape)
-        vfunc = np.vectorize(Logistic_Regression.apply_tanh)
-        h_x = vfunc(h_x)
-        # h_x = np.apply_along_axis(Logistic_Regression.apply_tanh,0,h_x.transpose())
-        regression_logger.info(h_x)
-        # df = pd.DataFrame(h_x)
-        # df[0] = df[0].apply(Logistic_Regression.apply_tanh, 0)
-        # regression_logger.info(df)
-        return h_x
+        # y has value 0 for no and 1 for yes
+        # for tanh to work we have to decode no as -1
+        # that's why replacing value 0 with -1
+
+        self.x = x_values.copy()
+        self.y = y_values.copy()
+        regression_logger.info(self.y)
+        self.y[self.y == 0] = -1
+        regression_logger.info(self.y)
+        self.alpha = alpha
+        self.max_iterations = max_iterations
+
+        number_of_samples, number_of_features = self.x.shape
+        number_of_co_efficients = number_of_features + 1  # 1 extra for Wo
+        one_column = np.ones((number_of_samples, 1))
+        regression_logger.info(self.x.shape)
+        self.x = np.append(self.x, one_column, axis=1)
+        regression_logger.info(self.x.shape)
+        self.co_eff = [0] * number_of_co_efficients
+        self.begin_training()
 
     def begin_training(self):
 
@@ -211,30 +95,32 @@ class Logistic_Regression:
                 f"after cycle no {cycle} co_effs are {self.co_eff}"
             )
 
-    def __init__(self, x_values, y_values, alpha=0.00005, max_iterations=200) -> None:
-        if len(x_values) != len(y_values):
-            raise Exception
+    @staticmethod
+    def apply_tanh(z):
+        e = 0.05
+        tanh_value = math.tanh(z)
+        if tanh_value < -0.95:
+            tanh_value = tanh_value + e
+        elif tanh_value > 0.95:
+            tanh_value = tanh_value - e
+        return tanh_value
 
-        # y has value 0 for no and 1 for yes
-        # for tanh to work we have to decode no as -1
-        # that's why replacing value 0 with -1
-
-        self.x = x_values.copy()
-        self.y = y_values.copy()
-        regression_logger.info(self.y)
-        self.y[self.y == 0] = -1
-        regression_logger.info(self.y)
-        self.alpha = alpha
-        self.max_iterations = max_iterations
-
-        number_of_samples, number_of_features = self.x.shape
-        number_of_co_efficients = number_of_features + 1  # 1 extra for Wo
-        one_column = np.ones((number_of_samples, 1))
-        regression_logger.info(self.x.shape)
-        self.x = np.append(self.x, one_column, axis=1)
-        regression_logger.info(self.x.shape)
-        self.co_eff = [0] * number_of_co_efficients
-        self.begin_training()
+    def hypothesis_of_x(self, x):
+        matrix_x = x
+        matrix_co_eff = np.array(self.co_eff).transpose()
+        regression_logger.info(matrix_x)
+        regression_logger.info(matrix_co_eff)
+        h_x = np.matmul(matrix_x, matrix_co_eff)
+        regression_logger.info(h_x)
+        regression_logger.info(h_x.shape)
+        vfunc = np.vectorize(Logistic_Regression.apply_tanh)
+        h_x = vfunc(h_x)
+        # h_x = np.apply_along_axis(Logistic_Regression.apply_tanh,0,h_x.transpose())
+        regression_logger.info(h_x)
+        # df = pd.DataFrame(h_x)
+        # df[0] = df[0].apply(Logistic_Regression.apply_tanh, 0)
+        # regression_logger.info(df)
+        return h_x
 
     def predict(self, x):
         x_with_xo = x.copy()
@@ -251,17 +137,6 @@ class Logistic_Regression:
         prediction = prediction.astype(int)
         regression_logger.info(prediction)
         return prediction
-
-
-model = Logistic_Regression(x, y)
-logger.info(model.co_eff)
-churn = model.predict(x)
-logger.info(churn)
-
-logger.info(np.bincount(churn))
-logger.info(np.bincount(y))
-result = (y == churn).mean()
-logger.info(result)
 
 
 class Weighted_Majority:
@@ -345,7 +220,7 @@ def adaboost(x, y, L, k=5):
         # reducing weight from 1 to below 1 for right predicted data points
         probability_update_multiplier = result * (error_sum / (1 - error_sum))
         # wrong predicted rows have 0 in them giving them weight of 1
-        probability_update_multiplier[probability_update_multiplier == 0] = 1 
+        probability_update_multiplier[probability_update_multiplier == 0] = 1
         adaboost_logger.info(probability_update_multiplier)
 
         # updating probability
@@ -363,12 +238,176 @@ def adaboost(x, y, L, k=5):
     return Weighted_Majority(hypothesis_group, hypothesis_weights)
 
 
-majority_model = adaboost(x, y, Logistic_Regression,15)
-churn = majority_model.predict(x)
+def dataset_1():
 
-logger.info(churn)
+    df = pd.read_csv("WA_Fn-UseC_-Telco-Customer-Churn.csv")
+    logger.info(len(df))
+    logger.info(df.head())
+    logger.info(df.dtypes)
+    logger.info(df[df.columns].isnull().sum())
+    logger.info(df[df.columns].nunique())
 
-logger.info(np.bincount(churn))
-logger.info(np.bincount(y))
-result = (y == churn).mean()
-logger.info(result)
+    categorical_columns = [
+        "gender",
+        "SeniorCitizen",
+        "Partner",
+        "Dependents",
+        "PhoneService",
+        "MultipleLines",
+        "InternetService",
+        "OnlineSecurity",
+        "OnlineBackup",
+        "DeviceProtection",
+        "TechSupport",
+        "StreamingTV",
+        "StreamingMovies",
+        "Contract",
+        "PaperlessBilling",
+        "PaymentMethod",
+    ]
+    numerical_columns = ["tenure", "MonthlyCharges", "TotalCharges"]
+
+    # TotalCharges column has float value but it is parsed as an object
+    # that's is why we are converting it to numeric float64
+    total_charges = pd.to_numeric(
+        df.TotalCharges, errors="coerce"
+    )  # converting to float64
+    logger.info(total_charges)
+    logger.info(type(total_charges))
+    # logging blank valued rows after converting to numeric
+    logger.info(
+        df[total_charges.isnull()][["customerID", "TotalCharges", "MonthlyCharges"]]
+    )
+    df["TotalCharges"] = total_charges
+
+    # replacing blanks with the MonthlyCharges attribute value of same row
+    values = df[total_charges.isnull()]["MonthlyCharges"].values
+    df.loc[total_charges.isnull(), "TotalCharges"] = values
+    logger.info(
+        df[total_charges.isnull()][["customerID", "TotalCharges", "MonthlyCharges"]]
+    )
+
+    # converting Y/Output value from yes/no to 1/-1
+    logger.info(df.Churn.head())
+    logger.info(df.Churn.value_counts())
+    df.Churn = df["Churn"].replace(to_replace="Yes", value=1)
+    df.Churn = df["Churn"].replace(to_replace="No", value=0)
+    logger.info(df.Churn.head())
+    logger.info(df.Churn.value_counts())
+
+    # normalizing numerical attributes
+    for attribute in numerical_columns:
+        min_value = df[attribute].min()
+        max_value = df[attribute].max()
+        df[attribute] = (df[attribute] - min_value) / (max_value - min_value)
+    # logging after normalization
+    logger.info(df[["customerID"] + numerical_columns])
+
+    # using same random_seed variable for reproducible result
+    random_seed = 7
+    test_data_fraction = 0.2
+    validation_data_fraction = 0.33
+
+    # splitting data for test and training
+    full_training_data, testing_data = train_test_split(
+        df, test_size=test_data_fraction, random_state=random_seed
+    )
+    # splitting full training data into training and validation data
+    training_data, validation_data = train_test_split(
+        full_training_data, test_size=validation_data_fraction, random_state=random_seed
+    )
+
+    # storing output churn column in sperate place and deleting this column from the dataframe
+    output_of_training_data = training_data.Churn.values
+    output_of_validation_data = validation_data.Churn.values
+    del training_data["Churn"]
+    del validation_data["Churn"]
+
+    logger.info(full_training_data.Churn.value_counts())
+
+    # doing catagorical value encoding using skitlearn's DictVectorizer class
+    training_data_dict = training_data[categorical_columns + numerical_columns].to_dict(
+        orient="records"
+    )
+    dictionary_vectorizer = DictVectorizer(sparse=False)
+    dictionary_vectorizer.fit(training_data_dict)
+    training_data_feature_matrix_x = dictionary_vectorizer.transform(training_data_dict)
+    logger.info(dictionary_vectorizer.get_feature_names_out())
+    logger.info(len(dictionary_vectorizer.get_feature_names_out()))
+    logger.info(training_data_feature_matrix_x[0])
+
+    # test dummy data
+    # 1231  147 w1
+    # 4561  258 w2
+    # 7891  369 w3
+    #       111
+    # data_x = [[1,2,3],[4,5,6],[7,8,9]]
+    # data_y = [1,1,0]
+    # x = pd.DataFrame(data_x)
+    # y = pd.DataFrame(data_y)
+    logger.info(type(training_data_feature_matrix_x))
+    x = training_data_feature_matrix_x
+    y = output_of_training_data
+    logger.info(x.shape)
+    logger.info(y.shape)
+    logger.info(np.bincount(y))
+
+    model = Logistic_Regression(x, y)
+    logger.info(model.co_eff)
+    churn = model.predict(x)
+    logger.info(churn)
+
+    logger.info(np.bincount(churn))
+    logger.info(np.bincount(y))
+    result = (y == churn).mean()
+    logger.info(result)
+
+    # doing catagorical value encoding using skitlearn's DictVectorizer class
+    validation_data_dict = validation_data[
+        categorical_columns + numerical_columns
+    ].to_dict(orient="records")
+    dictionary_vectorizer = DictVectorizer(sparse=False)
+    dictionary_vectorizer.fit(validation_data_dict)
+    validation_data_feature_matrix_x = dictionary_vectorizer.transform(
+        validation_data_dict
+    )
+    logger.info(dictionary_vectorizer.get_feature_names_out())
+    logger.info(len(dictionary_vectorizer.get_feature_names_out()))
+    logger.info(training_data_feature_matrix_x[0])
+
+    logger.info(type(validation_data_feature_matrix_x))
+    x_validation = validation_data_feature_matrix_x
+    y_validation = output_of_validation_data
+    logger.info(x_validation.shape)
+    logger.info(y_validation.shape)
+    logger.info(np.bincount(y_validation))
+
+    churn = model.predict(x_validation)
+    logger.info(churn)
+
+    logger.info(np.bincount(churn))
+    logger.info(np.bincount(y_validation))
+    result = (y_validation == churn).mean()
+    logger.info(result)
+
+    majority_model = adaboost(x, y, Logistic_Regression, 15)
+    churn = majority_model.predict(x)
+
+    logger.info(churn)
+
+    logger.info(np.bincount(churn))
+    logger.info(np.bincount(y))
+    result = (y == churn).mean()
+    logger.info(result)
+
+    churn = majority_model.predict(x_validation)
+
+    logger.info(churn)
+
+    logger.info(np.bincount(churn))
+    logger.info(np.bincount(y_validation))
+    result = (y_validation == churn).mean()
+    logger.info(result)
+
+
+dataset_1()
