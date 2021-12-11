@@ -306,24 +306,18 @@ def dataset_1():
     # using same random_seed variable for reproducible result
     random_seed = 7
     test_data_fraction = 0.2
-    validation_data_fraction = 0.33
 
     # splitting data for test and training
-    full_training_data, testing_data = train_test_split(
+    training_data, testing_data = train_test_split(
         df, test_size=test_data_fraction, random_state=random_seed
     )
-    # splitting full training data into training and validation data
-    training_data, validation_data = train_test_split(
-        full_training_data, test_size=validation_data_fraction, random_state=random_seed
-    )
+    
 
-    # storing output churn column in sperate place and deleting this column from the dataframe
     output_of_training_data = training_data.Churn.values
-    output_of_validation_data = validation_data.Churn.values
     del training_data["Churn"]
-    del validation_data["Churn"]
-
-    logger.info(full_training_data.Churn.value_counts())
+    output_of_testing_data = testing_data.Churn.values
+    del testing_data["Churn"]
+    
 
     # doing catagorical value encoding using skitlearn's DictVectorizer class
     training_data_dict = training_data[categorical_columns + numerical_columns].to_dict(
@@ -336,16 +330,9 @@ def dataset_1():
     logger.info(len(dictionary_vectorizer.get_feature_names_out()))
     logger.info(training_data_feature_matrix_x[0])
 
-    # test dummy data
-    # 1231  147 w1
-    # 4561  258 w2
-    # 7891  369 w3
-    #       111
-    # data_x = [[1,2,3],[4,5,6],[7,8,9]]
-    # data_y = [1,1,0]
-    # x = pd.DataFrame(data_x)
-    # y = pd.DataFrame(data_y)
+  
     logger.info(type(training_data_feature_matrix_x))
+    logger.info(type(output_of_training_data))
     x = training_data_feature_matrix_x
     y = output_of_training_data
     logger.info(x.shape)
@@ -363,34 +350,36 @@ def dataset_1():
     logger.info(result)
 
     # doing catagorical value encoding using skitlearn's DictVectorizer class
-    validation_data_dict = validation_data[
+    testing_data_dict = testing_data[
         categorical_columns + numerical_columns
     ].to_dict(orient="records")
     dictionary_vectorizer = DictVectorizer(sparse=False)
-    dictionary_vectorizer.fit(validation_data_dict)
-    validation_data_feature_matrix_x = dictionary_vectorizer.transform(
-        validation_data_dict
+    dictionary_vectorizer.fit(testing_data_dict)
+    testing_data_feature_matrix_x = dictionary_vectorizer.transform(
+        testing_data_dict
     )
     logger.info(dictionary_vectorizer.get_feature_names_out())
     logger.info(len(dictionary_vectorizer.get_feature_names_out()))
     logger.info(training_data_feature_matrix_x[0])
 
-    logger.info(type(validation_data_feature_matrix_x))
-    x_validation = validation_data_feature_matrix_x
-    y_validation = output_of_validation_data
-    logger.info(x_validation.shape)
-    logger.info(y_validation.shape)
-    logger.info(np.bincount(y_validation))
+    logger.info(type(testing_data_feature_matrix_x))
+    logger.info(type(output_of_testing_data))
+    x_test = testing_data_feature_matrix_x
+    y_test = output_of_testing_data
+    logger.info(x_test.shape)
+    logger.info(y_test.shape)
+    logger.info(np.bincount(y_test))
 
-    churn = model.predict(x_validation)
+    churn = model.predict(x_test)
     logger.info(churn)
 
     logger.info(np.bincount(churn))
-    logger.info(np.bincount(y_validation))
-    result = (y_validation == churn).mean()
+    logger.info(np.bincount(y_test))
+    result = (y_test == churn).mean()
     logger.info(result)
 
-    majority_model = adaboost(x, y, Logistic_Regression, 15)
+
+    majority_model = adaboost(x, y, Logistic_Regression, k=15)
     churn = majority_model.predict(x)
 
     logger.info(churn)
@@ -400,14 +389,15 @@ def dataset_1():
     result = (y == churn).mean()
     logger.info(result)
 
-    churn = majority_model.predict(x_validation)
+    churn = majority_model.predict(x_test)
 
     logger.info(churn)
 
     logger.info(np.bincount(churn))
-    logger.info(np.bincount(y_validation))
-    result = (y_validation == churn).mean()
+    logger.info(np.bincount(y_test))
+    result = (y_test == churn).mean()
     logger.info(result)
 
 
 dataset_1()
+
